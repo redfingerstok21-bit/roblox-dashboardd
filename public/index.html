@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Roblox Multi-Account Network</title>
+  <link rel="stylesheet" href="style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <div class="brand">
+        <div class="logo">⚡</div>
+        <div>
+          <h1>Roblox Control Center</h1>
+          <p class="subtitle">Live Multi-Account Monitoring</p>
+        </div>
+      </div>
+      <div class="global-stats">
+        <div class="stat-pill">
+          <span>Active Accounts:</span>
+          <strong id="activeCount">0</strong>
+        </div>
+      </div>
+    </header>
+
+    <main class="grid-container" id="cardsGrid">
+      <!-- Card akun akan di-render otomatis melalui JavaScript -->
+    </main>
+
+    <footer class="footer">
+      <p>Auto-refreshing every 3s • Last updated: <span id="globalClock">-</span></p>
+    </footer>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
