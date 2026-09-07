@@ -17,37 +17,68 @@ local function formatNumber(n)
     end
 end
 
--- Fungsi otomatis mencari statistik player
-local function getStatValue(statNames)
-    local leaderstats = LocalPlayer:FindFirstChild("leaderstats") or LocalPlayer:FindFirstChild("stats")
-    if leaderstats then
-        for _, name in ipairs(statNames) do
-            local found = leaderstats:FindFirstChild(name)
-            if found then
-                return found.Value
-            end
+-- Deteksi Uang & Income Khusus Steal an Egg
+local function getStealAnEggStats()
+    local money = 0
+    local income = 0
+
+    -- 1. Cek folder Data / PlayerData
+    local playerData = LocalPlayer:FindFirstChild("Data") or LocalPlayer:FindFirstChild("PlayerData") or LocalPlayer:FindFirstChild("leaderstats")
+    
+    if playerData then
+        local moneyObj = playerData:FindFirstChild("Money") or playerData:FindFirstChild("Cash") or playerData:FindFirstChild("Coins")
+        local incomeObj = playerData:FindFirstChild("Income") or playerData:FindFirstChild("Multiplier") or playerData:FindFirstChild("IncomePerSecond")
+
+        if moneyObj then money = moneyObj.Value end
+        if incomeObj then income = incomeObj.Value end
+    end
+
+    -- 2. Jika tidak ada di folder Data, cek modul/attributes
+    if money == 0 then
+        money = LocalPlayer:GetAttribute("Money") or LocalPlayer:GetAttribute("Cash") or 0
+    end
+    if income == 0 then
+        income = LocalPlayer:GetAttribute("Income") or LocalPlayer:GetAttribute("Multiplier") or 0
+    end
+
+    return money, income
+end
+
+-- Deteksi Pet Khusus Steal an Egg
+local function getEquippedPets()
+    local pets = {}
+    
+    -- Cari folder Pet yang sedang equipped
+    local petFolder = LocalPlayer:FindFirstChild("EquippedPets") or LocalPlayer:FindFirstChild("Pets") or LocalPlayer:FindFirstChild("PetsEquipped")
+    
+    if petFolder then
+        for _, pet in ipairs(petFolder:GetChildren()) do
+            local petName = pet.Name
+            
+            -- Ambil statistik multiplier / income pet
+            local incomeObj = pet:FindFirstChild("Income") or pet:FindFirstChild("Multiplier") or pet:FindFirstChild("Boost")
+            local incomeRaw = (incomeObj and incomeObj.Value) or pet:GetAttribute("Income") or 0
+
+            table.insert(pets, {
+                name = petName,
+                incomeRaw = incomeRaw,
+                income = formatNumber(incomeRaw)
+            })
         end
     end
-    return 0
+
+    return pets
 end
 
 local function sendData()
-    -- Otomatis mencari statistik berdasarkan nama yang sering dipakai di game
-    local moneyVal = getStatValue({"Money", "Coins", "Cash", "Yen", "Gems", "Gold", "Tokens"})
-    local incomeVal = getStatValue({"Income", "Income/s", "MPS", "GPS", "Multiplier"})
+    local moneyVal, incomeVal = getStealAnEggStats()
+    local equippedPets = getEquippedPets()
 
-    -- Ambil WalkSpeed & bulatkan nilainya
+    -- WalkSpeed yang rapi (dibulatkan)
     local walkSpeed = 16
     if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
         walkSpeed = math.floor(LocalPlayer.Character.Humanoid.WalkSpeed + 0.5)
     end
-
-    -- Contoh data Pet (Sesuaikan jika kamu punya sistem scanning Pet otomatis di game)
-    local equippedPets = {
-        { name = "Kitsune", incomeRaw = 3000000000, income = formatNumber(3000000000) },
-        { name = "Dragon", incomeRaw = 800000000, income = formatNumber(800000000) },
-        { name = "Dog", incomeRaw = 100000, income = formatNumber(100000) }
-    }
 
     local payload = {
         username = LocalPlayer.Name,
@@ -73,6 +104,7 @@ local function sendData()
     end
 end
 
+-- Kirim data setiap 3 detik
 task.spawn(function()
     while true do
         sendData()
