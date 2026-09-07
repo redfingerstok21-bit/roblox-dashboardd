@@ -1,10 +1,11 @@
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
 
 local VERCEL_URL = "https://roblox-dashboardd.vercel.app/api/update"
 
--- Helper Format Angka (K, M, B)
+-- Helper Format Angka
 local function formatNumber(n)
     if not n or type(n) ~= "number" then return "0" end
     if n >= 1e9 then
@@ -18,7 +19,7 @@ local function formatNumber(n)
     end
 end
 
--- Helper Parsing Teks
+-- Helper Parsing Teks (K, M, B -> Angka Raw)
 local function parseValue(str)
     if not str then return 0 end
     local num = str:gsub("[%$,/s]", ""):match("^%s*(.-)%s*$")
@@ -30,68 +31,69 @@ local function parseValue(str)
     return (tonumber(num) or 0) * mult
 end
 
--- 1. DETEKSI BASE / PLOT PEMAIN
-local function getMyPlot()
-    local plots = Workspace:FindFirstChild("Plots") or Workspace:FindFirstChild("Bases") or Workspace:FindFirstChild("PlotsFolder")
+-- DETEKSI OTOMATIS DATA GAME "STEAL AN EGG"
+local function getRealGameStats()
+    local moneyRaw = 0
+    local incomeRaw = 0
+    local equippedPets = {}
+
+    -- 1. Deteksi Data Utama dari Player / DataFolder
+    local playerData = LocalPlayer:FindFirstChild("Data") or LocalPlayer:FindFirstChild("Stats") or LocalPlayer:FindFirstChild("leaderstats")
+    if playerData then
+        for _, child in ipairs(playerData:GetChildren()) do
+            local name = child.Name:lower()
+            if name:find("money") or name:find("cash") or name:find("egg") or name:find("coin") then
+                moneyRaw = tonumber(child.Value) or moneyRaw
+            elseif name:find("income") or name:find("sec") or name:find("mult") then
+                incomeRaw = tonumber(child.Value) or incomeRaw
+            end
+        end
+    end
+
+    -- 2. Jika tidak ada di Player, Deteksi via Attributes (Metode Game Baru)
+    if moneyRaw == 0 then
+        moneyRaw = LocalPlayer:GetAttribute("Money") or LocalPlayer:GetAttribute("Coins") or 0
+    end
+    if incomeRaw == 0 then
+        incomeRaw = LocalPlayer:GetAttribute("Income") or LocalPlayer:GetAttribute("IncomePerSec") or 0
+    end
+
+    -- 3. Deteksi dari Plot / Base Milik Pemain di Map
+    local plots = Workspace:FindFirstChild("Plots") or Workspace:FindFirstChild("Bases")
     if plots then
         for _, plot in ipairs(plots:GetChildren()) do
             local owner = plot:FindFirstChild("Owner") or plot:FindFirstChild("Player")
             if owner and (owner.Value == LocalPlayer or owner.Value == LocalPlayer.Name) then
-                return plot
-            end
-        end
-    end
-    return nil
-end
+                -- Cari Pet yang aktif di Plot
+                local petFolder = plot:FindFirstChild("Pets") or plot:FindFirstChild("EquippedPets")
+                if petFolder then
+                    for _, pet in ipairs(petFolder:GetChildren()) do
+                        local pInc = 0
+                        local incObj = pet:FindFirstChild("Income") or pet:FindFirstChild("Multiplier")
+                        if incObj then pInc = tonumber(incObj.Value) or 0 end
 
--- 2. READ STATS & PETS DARI PLOT / PLAYER
-local function getPlayerData()
-    local moneyRaw = 0
-    local incomeRaw = 0
-    local petsList = {}
-
-    -- A. Cek dari Leaderstats standar jika ada
-    local leaderstats = LocalPlayer:FindFirstChild("leaderstats")
-    if leaderstats then
-        if leaderstats:FindFirstChild("Money") or leaderstats:FindFirstChild("Coins") then
-            moneyRaw = (leaderstats:FindFirstChild("Money") or leaderstats:FindFirstChild("Coins")).Value
-        end
-        if leaderstats:FindFirstChild("Income") or leaderstats:FindFirstChild("Income/s") then
-            incomeRaw = (leaderstats:FindFirstChild("Income") or leaderstats:FindFirstChild("Income/s")).Value
-        end
-    end
-
-    -- B. Cek langsung dari Plot / Base di Map
-    local myPlot = getMyPlot()
-    if myPlot then
-        -- Cari pet di dalam plot
-        local petsFolder = myPlot:FindFirstChild("Pets") or myPlot:FindFirstChild("Animals") or myPlot:FindFirstChild("HatchedPets")
-        if petsFolder then
-            for _, pet in ipairs(petsFolder:GetChildren()) do
-                local pName = pet.Name
-                local pInc = 0
-                local incVal = pet:FindFirstChild("Income") or pet:FindFirstChild("Mult")
-                if incVal then pInc = tonumber(incVal.Value) or 0 end
-                
-                table.insert(petsList, {
-                    name = pName,
-                    incomeRaw = pInc,
-                    income = formatNumber(pInc)
-                })
+                        table.insert(equippedPets, {
+                            name = pet.Name,
+                            incomeRaw = pInc,
+                            income = formatNumber(pInc)
+                        })
+                    end
+                end
             end
         end
     end
 
-    -- C. Fallback: Baca dari UI Player Gui jika belum ketemu
+    -- 4. Deteksi Cadangan (UI Scanning Otomatis jika lokasi internal terkunci)
     if moneyRaw == 0 or incomeRaw == 0 then
         local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
         if playerGui then
             for _, gui in ipairs(playerGui:GetDescendants()) do
-                if gui:IsA("TextLabel") and gui.Visible then
+                if gui:IsA("TextLabel") and gui.Visible and gui.Text ~= "" then
                     local txt = gui.Text
-                    if txt:find("%$") and moneyRaw == 0 then
+                    -- Deteksi format teks layar Uang & Income
+                    if (txt:find("%$") or gui.Name:lower():find("money")) and moneyRaw == 0 then
                         moneyRaw = parseValue(txt)
-                    elseif txt:find("/s") and incomeRaw == 0 then
+                    elseif (txt:find("/s") or gui.Name:lower():find("income")) and incomeRaw == 0 then
                         incomeRaw = parseValue(txt)
                     end
                 end
@@ -99,13 +101,14 @@ local function getPlayerData()
         end
     end
 
-    return moneyRaw, incomeRaw, petsList
+    return moneyRaw, incomeRaw, equippedPets
 end
 
--- 3. KIRIM DATA KE VERCEL
+-- FUNGSI UTAMA PENGIRIM DATA
 local function sendData()
-    local moneyVal, incomeVal, pets = getPlayerData()
+    local moneyVal, incomeVal, petsList = getRealGameStats()
 
+    -- Ambil WalkSpeed karakter secara presisi
     local walkSpeed = 16
     if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
         walkSpeed = math.floor(LocalPlayer.Character.Humanoid.WalkSpeed + 0.5)
@@ -118,7 +121,7 @@ local function sendData()
         income = formatNumber(incomeVal),
         incomeRaw = incomeVal,
         walkSpeed = walkSpeed,
-        pets = #pets > 0 and pets or {}
+        pets = petsList
     }
 
     local requestFunc = (syn and syn.request) or (http and http.request) or request or http_request
@@ -135,10 +138,13 @@ local function sendData()
     end
 end
 
--- Loop setiap 3 detik
+-- Kirim data langsung saat pertama kali di-execute
+sendData()
+
+-- Lalu perbarui terus secara realtime setiap 3 detik
 task.spawn(function()
     while true do
-        sendData()
         task.wait(3)
+        sendData()
     end
 end)
