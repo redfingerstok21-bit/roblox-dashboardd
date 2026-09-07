@@ -1,82 +1,68 @@
-async function fetchAndRender() {
+// Fungsi untuk mengambil data akun dari API Vercel
+async function fetchAccounts() {
   try {
-    const res = await fetch('/api/update');
-    const data = await res.json();
-    
-    const grid = document.getElementById('cardsGrid');
-    const now = Math.floor(Date.now() / 1000);
-    
-    // Ubah data object ke array
-    let accounts = Object.values(data);
-
-    // SORTING: Urutkan dari Income Raw tertinggi ke terendah
-    accounts.sort((a, b) => (b.incomeRaw || 0) - (a.incomeRaw || 0));
-
-    document.getElementById('activeCount').innerText = accounts.length;
-    document.getElementById('globalClock').innerText = new Date().toLocaleTimeString();
-
-    grid.innerHTML = '';
-
-    accounts.forEach((acc, index) => {
-      const isOnline = acc.lastSeen && (now - acc.lastSeen < 12);
-      
-      // Hitung Top Pet
-      let topPetName = 'None';
-      let topPetIncome = '0/s';
-      if (acc.pets && acc.pets.length > 0) {
-        const topPet = acc.pets.reduce((max, pet) => (pet.incomeRaw > max.incomeRaw) ? pet : max, acc.pets[0]);
-        topPetName = topPet.name;
-        topPetIncome = `${topPet.income}/s`;
-      }
-
-      const card = document.createElement('div');
-      card.className = 'card';
-      card.innerHTML = `
-        <div class="rank-badge">#${index + 1}</div>
-        <div class="card-header">
-          <div class="avatar-wrapper">
-            <div class="avatar">👤</div>
-            <div class="status-dot ${isOnline ? 'online' : ''}"></div>
-          </div>
-          <div>
-            <div class="username">${acc.username || 'Unknown'}</div>
-            <div class="userid">ID: ${acc.userId || '-'}</div>
-          </div>
-        </div>
-
-        <div class="stats-grid">
-          <div class="stat-box">
-            <div class="stat-label">💰 Money</div>
-            <div class="stat-val">${acc.money || '0'}</div>
-          </div>
-          <div class="stat-box">
-            <div class="stat-label">⚡ Income / s</div>
-            <div class="stat-val" style="color: var(--accent-green);">${acc.income || '0'}/s</div>
-          </div>
-          <div class="stat-box">
-            <div class="stat-label">🏃 Walkspeed</div>
-            <div class="stat-val">${acc.walkSpeed || '16'}</div>
-          </div>
-          <div class="stat-box">
-            <div class="stat-label">🐾 Pets Equipped</div>
-            <div class="stat-val">${acc.pets ? acc.pets.length : 0}</div>
-          </div>
-        </div>
-
-        <div class="top-pet-section">
-          <div class="pet-info">
-            <span class="pet-title">👑 TOP PET</span>
-            <span class="pet-name">${topPetName}</span>
-          </div>
-          <span class="pet-income">${topPetIncome}</span>
-        </div>
-      `;
-      grid.appendChild(card);
-    });
-  } catch (err) {
-    console.error("Fetch error:", err);
+    const response = await fetch('/api/update');
+    const data = await response.json();
+    renderCards(data);
+  } catch (error) {
+    console.error('Gagal mengambil data:', error);
   }
 }
 
-setInterval(fetchAndRender, 3000);
-fetchAndRender();
+// Fungsi merender kartu ke halaman HTML
+function renderCards(accounts) {
+  const container = document.getElementById('accounts-container') || document.body;
+  
+  if (!accounts || accounts.length === 0) {
+    container.innerHTML = '<p class="no-data">Belum ada akun yang terhubung.</p>';
+    return;
+  }
+
+  let html = '';
+
+  accounts.forEach((acc, index) => {
+    const topPet = (acc.pets && acc.pets.length > 0) ? acc.pets[0] : null;
+
+    html += `
+      <div class="card">
+        <div class="card-header">
+          <div class="user-info">
+            <span class="user-avatar">${acc.username ? acc.username.substring(0, 2).toUpperCase() : 'RO'}</span>
+            <div>
+              <h3 class="username">${acc.username || 'Unknown'}</h3>
+              <p class="user-id">ID: ${acc.userId || '-'}</p>
+            </div>
+          </div>
+          <span class="rank">#${index + 1}</span>
+        </div>
+
+        <!-- STATS GRID (TANPA MONEY) -->
+        <div class="stats-grid">
+          <div class="stat-item">
+            <span class="stat-label">⚡ INCOME / S</span>
+            <span class="stat-value text-green">${acc.income || '0/s'}</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">🏃 WALKSPEED</span>
+            <span class="stat-value">${acc.walkSpeed || 16}</span>
+          </div>
+        </div>
+
+        <!-- TOP PET SECTION -->
+        <div class="pet-card">
+          <div class="pet-info">
+            <span class="stat-label">👑 TOP PET</span>
+            <span class="pet-name">${topPet ? topPet.name : 'None'}</span>
+          </div>
+          <span class="pet-income">${topPet ? topPet.income : '0/s'}</span>
+        </div>
+      </div>
+    `;
+  });
+
+  container.innerHTML = html;
+}
+
+// Jalankan pengambilan data secara otomatis setiap 2 detik
+fetchAccounts();
+setInterval(fetchAccounts, 2000);
