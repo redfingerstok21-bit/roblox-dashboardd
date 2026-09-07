@@ -4,10 +4,11 @@ local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
 local VERCEL_URL = "https://roblox-dashboardd.vercel.app/api/update"
 
-local function getStats()
+local function scanData()
     local incStr = "0/s"
-    
-    -- Fast scan text UI
+    local petsFound = {}
+
+    -- 1. Scan Income dari Layar UI
     for _, gui in ipairs(PlayerGui:GetDescendants()) do
         if gui:IsA("TextLabel") and gui.Visible and gui.Text:find("/s") then
             incStr = gui.Text
@@ -15,23 +16,50 @@ local function getStats()
         end
     end
 
-    local ws = 16
-    if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
-        ws = math.floor(LocalPlayer.Character.Humanoid.WalkSpeed)
+    -- 2. Scan Pet dari Karakter Player / Backpack
+    local char = LocalPlayer.Character
+    if char then
+        for _, obj in ipairs(char:GetChildren()) do
+            if obj:IsA("Model") and not obj:FindFirstChildOfClass("Humanoid") then
+                table.insert(petsFound, {
+                    name = obj.Name,
+                    income = incStr
+                })
+            end
+        end
     end
 
-    return incStr, ws
+    -- Fallback jika pet tidak berbentuk 3D Model di Karakter
+    if #petsFound == 0 then
+        for _, gui in ipairs(PlayerGui:GetDescendants()) do
+            if gui:IsA("ImageLabel") or gui:IsA("TextLabel") then
+                if gui.Name:lower():find("pet") or (gui.Parent and gui.Parent.Name:lower():find("pet")) then
+                    if gui:IsA("TextLabel") and gui.Text ~= "" and not gui.Text:find("/s") then
+                        table.insert(petsFound, { name = gui.Text, income = incStr })
+                        break
+                    end
+                end
+            end
+        end
+    end
+
+    local ws = 16
+    if char and char:FindFirstChild("Humanoid") then
+        ws = math.floor(char.Humanoid.WalkSpeed + 0.5)
+    end
+
+    return incStr, ws, petsFound
 end
 
-local function send()
-    local inc, ws = getStats()
+local function sendData()
+    local inc, ws, pets = scanData()
     
     local payload = {
         username = LocalPlayer.Name,
         userId = tostring(LocalPlayer.UserId),
         income = inc,
         walkSpeed = ws,
-        pets = {}
+        pets = pets
     }
 
     local req = (syn and syn.request) or (http and http.request) or request or http_request
@@ -45,10 +73,10 @@ local function send()
     end
 end
 
-send()
+sendData()
 task.spawn(function()
     while true do
         task.wait(3)
-        send()
+        sendData()
     end
 end)
