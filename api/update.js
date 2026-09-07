@@ -1,32 +1,41 @@
-// Storage global menyimpan multi-akun berdasarkan UserId
-let globalAccounts = {};
+// Storage sementara di serverless
+global.accountsData = global.accountsData || {};
 
-export default function handler(req, res) {
-  if (req.method === 'POST') {
-    const body = req.body;
-    
-    if (!body.userId) {
-      return res.status(400).json({ error: "Missing userId" });
-    }
+export default async function handler(req, res) {
+  // Izinkan CORS
+  res.setHeader('Access-Control-Allow-Credentials', true);
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-    // Simpan/Update data per akun berdasarkan Key (userId)
-    globalAccounts[body.userId] = {
-      username: body.username,
-      userId: body.userId,
-      money: body.money,
-      income: body.income,
-      incomeRaw: body.incomeRaw || 0, // Digunakan untuk urutan sorting
-      walkSpeed: body.walkSpeed,
-      pets: body.pets || [],
-      lastSeen: Math.floor(Date.now() / 1000)
-    };
-
-    return res.status(200).json({ status: "ok" });
-  } 
-
-  if (req.method === 'GET') {
-    return res.status(200).json(globalAccounts);
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
   }
 
-  res.status(405).end();
+  if (req.method === 'POST') {
+    try {
+      const data = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
+      const userId = data.userId || data.username || "unknown";
+
+      global.accountsData[userId] = {
+        username: data.username || "Unknown Player",
+        userId: userId,
+        income: data.income || "0/s",
+        walkSpeed: data.walkSpeed || 16,
+        pets: Array.isArray(data.pets) ? data.pets : [],
+        lastUpdated: Date.now()
+      };
+
+      return res.status(200).json({ success: true, count: Object.keys(global.accountsData).length });
+    } catch (err) {
+      return res.status(400).json({ error: "Invalid JSON Data" });
+    }
+  }
+
+  if (req.method === 'GET') {
+    const list = Object.values(global.accountsData || {});
+    return res.status(200).json(list);
+  }
+
+  return res.status(405).json({ error: "Method Not Allowed" });
 }
